@@ -10,6 +10,21 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include<time.h>
+
+
+void operatii_server(char *tip_operatie)      //scriu toate operatiile efectuatede server in fisierul log.txt
+{
+    FILE*f=fopen("log.txt","a");
+    time_t current_time = time(NULL); // obtin timpul curent
+    struct tm *time_info = localtime(&current_time); // convertesc timpul curent la formatul struct tm
+    char buffer[80];
+    strftime(buffer, sizeof(buffer), "%c", time_info); // formatez data si ora curenta in formatul dorit
+    fprintf(f,"\n");
+    fprintf(f, "%s,\t", buffer); // scriu data si ora curenta in fisier
+    fprintf(f,"%s\t",tip_operatie);
+    fclose(f); // inchide fisierul
+}
 
 void Eroare(char *e) 
 { 
@@ -87,6 +102,32 @@ void sigint_handler(int signum) {
     exit(0);
 }
 
+void sterge_linie(char *nume_fisier)
+{
+     FILE *file, *temp;
+    char buffer[1024];
+
+    file = fopen("fisiere_server.txt", "r");
+    temp = fopen("temp.txt", "w");
+
+    while (fgets(buffer, 1024, file) != NULL) 
+        if (strstr(buffer, nume_fisier) == NULL) 
+            fputs(buffer, temp);
+
+    fclose(file);
+    fclose(temp);
+
+    remove("fisiere_server.txt");
+    rename("temp.txt", "fisiere_server.txt");
+}
+
+void adauga_nume_fisier(char *nume)
+{
+    FILE*f=fopen("log.txt","a");
+    fprintf(f, "%s,\t", nume);    //adaug in fisierul log.txt numele fisierului afectat
+    fclose(f);
+}
+
 void main()
 {
     
@@ -101,6 +142,27 @@ void main()
 
     bind(readSock,(struct sockaddr*) &server, sizeof(server));  //realizeaza legatura dintre un socket si o adresa de conectare
     listen(readSock,10);    //specifica numarul de cereri de conexiune
+
+//introdu in fisiierul fisiere_server.txt lista de fisiere disponibile din server
+ 
+    DIR* dir;
+    struct dirent* ent;
+    if ((dir = opendir(".")) != NULL)
+    {
+        FILE *f1 = fopen("fisiere_server.txt","w");
+
+        while ((ent = readdir(dir)) != NULL)
+        {
+            struct stat buf;
+            stat(ent->d_name, &buf);
+            if (S_ISREG(buf.st_mode)) 
+                    fprintf(f1,"%s\n", ent->d_name); //scriu in fisier doar numele fisierelor
+                
+        }
+        closedir(dir);
+        fclose(f1);
+    }
+ 
 
 while(1) 
 {
@@ -119,6 +181,7 @@ while(1)
 		    
             if (strcmp(receiveBuff,"list")==0) 
             {
+                operatii_server("list");
                // system("ls > comanda.txt");
                 DIR* dir;
                 struct dirent* ent;
@@ -132,7 +195,7 @@ while(1)
                         stat(ent->d_name, &buf);
                         if (S_ISREG(buf.st_mode)) 
                             fprintf(f,"%s\n", ent->d_name); //scriu in fisier doar numele fisierelor
-        
+                        
                     }
                     closedir(dir);
                     fclose(f);
@@ -149,20 +212,32 @@ while(1)
                 p=strtok(NULL,"\n");
                 printf("Numele fisierului pe care vreau sa il afisez este: %s.\n",p);
                 get_(p,sendBuff);
+
+                operatii_server("get");
+                adauga_nume_fisier(p);
+                printf("Fisierul a fost adaugat cu succes.\n");
             }
             else if(strstr(receiveBuff,"delete")!=NULL) 
             { 
+                
                 char copie[32];
                 strcpy(copie,receiveBuff);
                 char*p=strtok(copie," ");
                 p=strtok(NULL,"\n");
                 printf("Numele fisierului pe care vreau sa il sterg este: %s.\n",p);
+                sterge_linie(p);
+
+                operatii_server("delete");
+                adauga_nume_fisier(p);
                 delete_(p,sendBuff);
+                printf("Fisierul a fost sters cu succes.\n");
+                
             }
             
             else if(strcmp(receiveBuff,"bye")==0) 
             { 
-                 signal(SIGTERM, sigterm_handler);
+                operatii_server("bye");
+                signal(SIGTERM, sigterm_handler);
                 signal(SIGINT, sigint_handler);
                 
                 bzero(sendBuff, 1024);
@@ -181,18 +256,27 @@ while(1)
         
             else if(strstr(receiveBuff,"put")!=NULL)
                 {
-                    printf("%s",receiveBuff);
+                    //printf("%s",receiveBuff);
+                   
                     char copie[1024];
                     strcpy(copie,receiveBuff);
                     char*p=strtok(copie,"$");
                     p=strtok(NULL,"$");
+    
+                    operatii_server("put");
+                    adauga_nume_fisier(p);
 
                    // printf("\ncopia este: %s",copie);
                 
-                    FILE*f1=fopen("fisier_nou_server.txt","w");
-                     p=strtok(NULL,"$");
+                    FILE*f1=fopen(p,"w");
+                    FILE*f=fopen("fisiere_server.txt","a");
+                    fseek(f, 0, SEEK_END); 
+                    fwrite(p, sizeof(char), sizeof(p), f);  //scriu numele fisierului pe care il adaug la server in fisierul fisiere_server.txt
+                    fclose(f); // inchide fisierul
+                    p=strtok(NULL,"$");
                     fprintf(f1,"%s",p);
                     fclose(f1);
+                    printf("Fisierul a fost primit cu succes.\n");
                 }
             else
                 strcpy(sendBuff,"Comanda necunoscuta");

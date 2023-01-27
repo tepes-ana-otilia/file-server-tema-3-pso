@@ -77,6 +77,8 @@ int main()
             printf("Numele fisierului pe care vreau sa il trimit este: %s.\n",p);
             //FILE*f=fopen(p,"r");
             put_(p,sendBuff);
+            printf("Fisierul a fost trimis cu succes.\n");
+        
         }
      
 
@@ -86,7 +88,7 @@ int main()
         recv(sock,&receiveBuff,1024*1024,0);
         if(strstr(sendBuff, "get")!=NULL) 
         {
-            printf("%s",receiveBuff);
+            //printf("%s",receiveBuff);
             char copie[1024];
             strcpy(copie,receiveBuff);
             char*p=strtok(copie,"$");
@@ -97,6 +99,8 @@ int main()
             p=strtok(NULL,"$");
             fprintf(f,"%s",p);
             fclose(f);
+            printf("Fisierul a fost primit cu succes.\n");
+            strcpy(receiveBuff,p);
         }
         printf("%s\n",receiveBuff);
         } while(strcmp(sendBuff,"bye")!=0);
